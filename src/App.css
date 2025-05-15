@@ -67,3 +67,10 @@
 .animate-blink {
   animation: blink 1s step-start infinite;
 }
+
+
+@layer components {
+  .form-field {
+    @apply w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#ea5430];
+  }
+}

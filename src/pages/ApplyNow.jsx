@@ -1,184 +1,276 @@
-"use client";
-import React, { useState, useEffect } from "react";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
-import app from "../firebase";
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
-// import Image from "next/image";
+const jobRoles = {
+  "Field Survey Executive": {
+    location: "Bihar (Field Work)",
+    work: "Booth level survey, voter data collection, and outreach.",
+    salary: "₹12,000 - ₹18,000/month + Performance Incentives",
+    tenure: "5–6 months",
+    fee: 1,
+  },
+  "Telecalling Executive": {
+    location: "Work from Home",
+    work: "Calling voters and data entry.",
+    salary: "₹10,000 - ₹14,000/month + Incentives on Conversion",
+    tenure: "5–6 months",
+    fee: 300,
+  },
+  "Social Media Manager": {
+    location: "Bihar (Field/Studio Work)",
+    work: "Managing outreach on Facebook, WhatsApp, Instagram.",
+    salary: "₹12,500 - ₹18,000/month + Bonus",
+    tenure: "5–6 months",
+    fee: 400,
+  },
+  "Area Coordinator": {
+    location: "Bihar (District-wise)",
+    work: "Supervising teams, reporting progress, and area-level control.",
+    salary: "₹18,000 - ₹22,000/month + Team Performance Incentives",
+    tenure: "5–6 months",
+    fee: 500,
+  },
+  "Video Editor": {
+    location: "Bihar (Field/Studio Work)",
+    work: "Editing campaign videos, creating clips and ads.",
+    salary: "₹15,000 - ₹22,000/month + Bonus",
+    tenure: "5–6 months",
+    fee: 450,
+  },
+  "Graphic Designer": {
+    location: "Bihar (Field/Studio Work)",
+    work: "Designing banners, social media posts.",
+    salary: "₹12,000 - ₹18,000/month + Bonus",
+    tenure: "5–6 months",
+    fee: 400,
+  },
+  "Electronic Media Anchor": {
+    location: "Bihar (Field/Studio Work)",
+    work: "Hosting live discussions, debates & social events.",
+    salary: "₹18,000 - ₹25,000/month + On-Air Bonus",
+    tenure: "5–6 months",
+    fee: 500,
+  },
+};
 
-// Sample country codes 
-const countryCodes = [
-  { code: "+91", name: "India" },
-  { code: "+1", name: "United States" },
-  { code: "+44", name: "United Kingdom" }
-  // Add more country codes as needed 
-];
-
-export default function Login() {
+const ApplyNow = () => {
+  const { category } = useParams();
+  const navigate = useNavigate();
+  const roleDetails = jobRoles[category] || {};
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState(null);
-  const [otpSent, setOtpSent] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [selectedCountryCode, setSelectedCountryCode] = useState(countryCodes[0].code); // Default to the first country code 
+  const [formData, setFormData] = useState({
+    name: '',
+    fatherName: '',
+    mobile: localStorage.getItem('mobile') || '',
+    altMobile: '',
+    email: '',
+    dob: '',
+    gender: '',
+    address: '',
+    district: '',
+    state: '',
+    category: '',
+    qualification: '',
+    experience: '',
+    aadhar: '',
+    hasReferral: 'no',
+    referralCode: '',
+    referralValid: false,
+    agree: false,
+  });
 
-  const auth = getAuth(app);
-//   const router = useRouter();
+  const [fee, setFee] = useState(roleDetails.fee || 0);
 
   useEffect(() => {
-    if (window.recaptchaVerifier) {
-      window.recaptchaVerifier.clear();
-    }
+    const token = localStorage.getItem('token');
+    const storedPhoneNumber = localStorage.getItem('phoneNumber');
+    setPhoneNumber(storedPhoneNumber);
+    if (!token) navigate('/login');
+  }, [navigate]);
 
-    const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'normal',
-      callback: (response) => {
-        // Handle recaptcha success if needed 
-      },
-      'expired-callback': () => {
-        // Handle recaptcha expiration if needed 
-      }
+  useEffect(() => {
+    const baseFee = roleDetails.fee || 0;
+    const discounted = formData.referralValid ? baseFee * 0.85 : baseFee;
+    setFee(Math.round(discounted));
+  }, [formData.referralValid, category]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const checkReferralCode = () => {
+    if (formData.referralCode.trim() === 'REFER15') {
+      alert('Referral code is valid!');
+      setFormData(prev => ({ ...prev, referralValid: true }));
+    } else {
+      alert('Invalid referral code!');
+      setFormData(prev => ({ ...prev, referralValid: false }));
+    }
+  };
+
+  const loadRazorpay = (src) => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
     });
-    window.recaptchaVerifier = recaptchaVerifier;
-  }, [auth]);
-
-  const handlePhoneNumberChange = (e) => {
-    setPhoneNumber(e.target.value);
   };
 
-  const handleOTPChange = (e) => {
-    setOtp(e.target.value);
-  };
-
-  const handleCountryCodeChange = (e) => {
-    setSelectedCountryCode(e.target.value);
-  };
-
-  const handleSendOtp = async () => {
-    setSendingOtp(true); // Start the sending OTP state 
-    try {
-      // Verify reCAPTCHA
-      await window.recaptchaVerifier.verify();
-
-      const formattedPhoneNumber = phoneNumber.replace(/\D/g, '');
-      const fullPhoneNumber = `${selectedCountryCode}${formattedPhoneNumber}`;
-
-      const confirmation = await signInWithPhoneNumber(auth, fullPhoneNumber, window.recaptchaVerifier);
-      setConfirmationResult(confirmation);
-      setOtpSent(true);
-      setPhoneNumber('');
-    
-    
-    } catch (error) {
-      console.error('Error sending OTP:', error);
-      alert('Failed to send OTP. Please check the phone number and try again.');
-    } finally {
-      setSendingOtp(false); // End the sending OTP state 
+  const handlePayment = async () => {
+    const res = await loadRazorpay('https://checkout.razorpay.com/v1/checkout.js');
+    if (!res) {
+      alert('Failed to load Razorpay SDK');
+      return;
     }
-  };
 
-  const handleOTPSubmit = async () => {
-    setVerifyingOtp(true); // Start the verifying OTP state 
     try {
-      if (!confirmationResult) {
-        alert('No OTP sent. Please send OTP first.');
-        return;
-      }
+      const { data } = await axios.post('http://localhost:5000/api/payment/create-order', { amount: fee });
+      const options = {
+        key: "rzp_test_IFv0P1wWi2CvpJ",
+        currency: data.currency,
+        amount: data.amount,
+        order_id: data.id,
+        name: 'Application Payment',
+        description: 'Form Fee',
+        handler: async (response) => {
+          const verifyRes = await axios.post('http://localhost:5000/api/payment/verify-payment', {
+            ...formData,
+            category,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
 
-      const userCredential = await confirmationResult.confirm(otp);
-      console.log(userCredential);
-      const user = userCredential.user;
-      // Store user ID and token in localStorage
-      const token = await user.getIdToken(); // Get the ID token
-      localStorage.setItem('userId', user.uid);
-      localStorage.setItem('token', token);
-      localStorage.setItem('phoneNumber', user.phoneNumber);
-      // Store the current timestamp
-      const expirationDate = new Date().getTime() + 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-      localStorage.setItem('tokenExpiration', expirationDate);
+          if (verifyRes.data.success) {
+            alert('Payment successful and form submitted!');
+            navigate('/thank-you');
+          } else {
+            alert('Payment verification failed!');
+          }
+        },
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.mobile,
+        },
+      };
 
-      setOtp('');
-    //   router.push('/CheckUser');
+      const rzp = new window.Razorpay(options);
+      rzp.open();
     } catch (error) {
-      console.error('Error confirming OTP:', error);
-      alert('Invalid OTP. Please try again.');
-    } finally {
-      setVerifyingOtp(false); // End the verifying OTP state 
+      console.error(error);
+      alert('Payment failed!');
     }
   };
 
   return (
-<>
+    <div className="min-h-screen bg-white px-4 py-6 md:px-8">
+      <div className="max-w-full mx-auto bg-white shadow-md p-6 rounded-md">
+        <h2 className="text-2xl font-bold mb-6 text-[#ea5430]">Apply for: {category}</h2>
 
-    <div className=' flex h-screen flex-col md:flex-row items-center justify-center '
+        {roleDetails && (
+          <div className="mb-6 p-4 border rounded bg-gray-50">
+            <h3 className="text-xl font-semibold text-[#ea5430] mb-2">Job Details</h3>
+            <p><strong>Location:</strong> {roleDetails.location}</p>
+            <p><strong>Work:</strong> {roleDetails.work}</p>
+            <p><strong>Salary:</strong> {roleDetails.salary}</p>
+            <p><strong>Tenure:</strong> {roleDetails.tenure}</p>
+            <p><strong>Application Fee:</strong> ₹{roleDetails.fee}</p>
+            {formData.referralValid && (
+              <p className="text-green-600"><strong>Discounted Fee:</strong> ₹{fee} (15% off with referral)</p>
+            )}
+          </div>
+        )}
 
-   
-    //  style={{ 
-    //   backgroundImage: "url('/Backgrounds/des2.jpg')", 
-    //   backgroundSize: 'cover', 
-    //   backgroundRepeat: 'no-repeat', 
-    //   backgroundPosition: 'center' 
-    // }}
-     >
-    <div className="w-full m-4 "></div>
-    <div className="w-full m-4 ">
-    <div className="container mx-auto p-12 w-full h-80vh border-double border-4 border-white bg-gray-100 shadow-md  bg-opacity-100 backdrop-filter backdrop-blur-lg rounded-md" >
-    <div className="text-white flex justify-center items-center mb-10 h-20 " style={{ 
-    //   backgroundImage: "url('/Backgrounds/loginbackground8.jpg')", 
-      backgroundSize: 'cover', 
-      backgroundRepeat: 'no-repeat', 
-      backgroundPosition: 'center', 
-     
-    }}><b>Welcome to WeTailor4U</b> </div>
-      {!otpSent && <div id="recaptcha-container" className="mb-4"></div>}
+        <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+          <input disabled value={category} className="form-field" placeholder="Post Applied For" />
+          <input name="name" onChange={handleChange} placeholder="Candidate Name" className="form-field" />
+          <input name="fatherName" onChange={handleChange} placeholder="Father's Name" className="form-field" />
+          <input disabled value={phoneNumber} className="form-field" placeholder="Mobile Number" />
+          <input name="altMobile" onChange={handleChange} placeholder="Secondary Mobile Number" className="form-field" />
+          <input name="email" type="email" onChange={handleChange} placeholder="Email ID" className="form-field" />
+          <input name="dob" type="date" onChange={handleChange} className="form-field" />
 
-      {!otpSent ? (
-        <>
-          <div className="mb-4">
-            <select
-              value={selectedCountryCode}
-              onChange={handleCountryCodeChange}
-              className="border border-gray-300 p-2 rounded-md w-full bg-gray-200 "
-            >
-              {countryCodes.map(({ code, name }) => (
-                <option key={code} value={code}>
-                  {name} ({code})
-                </option>
+          <div className="form-field">
+            <label className="block font-medium mb-1">Gender:</label>
+            <div className="flex gap-6">
+              {['Male', 'Female', 'Other'].map(g => (
+                <label key={g} className="flex items-center gap-2">
+                  <input type="radio" name="gender" value={g} onChange={handleChange} />
+                  {g}
+                </label>
               ))}
-            </select>
+            </div>
           </div>
-          <div className="mb-4">
-            <input
-              type="tel"
-              value={phoneNumber}
-              onChange={handlePhoneNumberChange}
-              placeholder="Enter Phone Number"
-              className="border border-gray-300 p-2 rounded-md w-full bg-gray-200 text-black"
-            />
-          </div>
-        </>
-      ) : (
-        <div className="mb-4">
-          <input
-            type="text"
-            value={otp}
-            onChange={handleOTPChange}
-            placeholder="Enter OTP"
-            className="border border-gray-300 p-2 rounded-md w-full bg-gray-200"
-          />
-        </div>
-      )}
 
-      <button
-        onClick={otpSent ? handleOTPSubmit : handleSendOtp}
-        className={`text-white p-2 rounded-md w-full ${otpSent ? 'bg-[#1e293b] hover:bg-[#0c0a09]' : 'bg-[#1e293b] hover:bg-[#0c0a09]' } flex items-center justify-center`}
-        disabled={sendingOtp || verifyingOtp} // Disable button while sending OTP or verifying OTP 
-      >
-        {sendingOtp ? 'Click on Capcha Verification..' : verifyingOtp ? 'Verifying...' : otpSent ? 'Submit OTP' : 'Send OTP'}
-      </button>
+          <textarea name="address" onChange={handleChange} placeholder="Full Address" className="form-field" />
+          <input name="district" onChange={handleChange} placeholder="District" className="form-field" />
+          <input name="state" onChange={handleChange} placeholder="State" className="form-field" />
+
+          <select name="category" onChange={handleChange} className="form-field">
+            <option value="">Select Category</option>
+            {['GEN', 'OBC', 'SC', 'ST', 'EWS'].map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+
+          <select name="qualification" onChange={handleChange} className="form-field">
+            <option value="">Select Qualification</option>
+            <option value="below10th">Below 10th</option>
+            <option value="Secondary">Secondary (10th Pass)</option>
+            <option value="Higher Secondary">Higher Secondary (12th Pass)</option>
+            <option value="Graduate">Graduate</option>
+            <option value="Postgraduate">Postgraduate</option>
+            <option value="PhD">PhD</option>
+          </select>
+
+          <input name="experience" onChange={handleChange} placeholder="Work Experience (optional)" className="form-field" />
+          <input name="aadhar" onChange={handleChange} placeholder="Aadhar Number" className="form-field" />
+
+          <div className="form-field">
+            <label className="block font-medium mb-1">Do you have a referral code?</label>
+            <div className="flex gap-6">
+              {['yes', 'no'].map(opt => (
+                <label key={opt} className="flex items-center gap-2">
+                  <input type="radio" name="hasReferral" value={opt} checked={formData.hasReferral === opt} onChange={handleChange} />
+                  {opt}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {formData.hasReferral === 'yes' && (
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <input name="referralCode" placeholder="Referral Code" onChange={handleChange} className="form-field flex-1" />
+              <button type="button" onClick={checkReferralCode} className="bg-[#ea5430] text-white px-4 py-2 rounded">
+                Check
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-start gap-2">
+            <input type="checkbox" id="agree" checked={formData.agree || false} onChange={(e) => setFormData(prev => ({ ...prev, agree: e.target.checked }))} className="mt-1" />
+            <label htmlFor="agree" className="text-sm text-gray-700">
+              I hereby declare that the information provided is true and correct to the best of my knowledge.
+            </label>
+          </div>
+
+          <button
+            type="button"
+            disabled={!formData.agree}
+            onClick={handlePayment}
+            className={`w-full py-3 rounded text-lg font-medium ${formData.agree ? 'bg-[#ea5430] text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+          >
+            Pay ₹{fee}
+          </button>
+        </form>
+      </div>
     </div>
-    </div>
-    </div>
-    </>
   );
-}
+};
+
+export default ApplyNow;
